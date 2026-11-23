@@ -93,12 +93,26 @@
     color: rgba(255,249,234,.72); max-width: 19ch;
   }
 
+  /* iOS hijacks long-press on images for its own share menu unless
+     touch-callout is disabled. Without this the press never reaches us. */
+  .press-zone {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    padding: 10px 28px 18px;
+    border-radius: 28px;
+    transition: transform .18s ease, background .18s ease;
+  }
+  .press-zone.pressing {
+    transform: scale(.96);
+    background: rgba(255,249,234,.05);
+  }
   .hat {
     width: clamp(96px, 28vw, 132px); height: auto; margin-top: 4vh;
     filter: drop-shadow(0 10px 28px rgba(0,0,0,.5)); border-radius: 24px;
-    transition: transform .18s ease;
+    -webkit-touch-callout: none;
+    pointer-events: none;
   }
-  .hat.pressing { transform: scale(.93); }
 
   .widget-slot {
     margin-top: auto; width: 100%; display: flex; justify-content: center;
@@ -181,7 +195,7 @@
     <p class="kicker">North Pole</p>
     <h1>Call Santa</h1>
     <p class="sub">Your own line to the workshop</p>
-    <img class="hat" id="hat" src="icon-512.png" alt="">
+    <div class="press-zone" id="pressZone"><img class="hat" src="icon-512.png" alt=""></div>
     <div class="widget-slot" id="widgetHome"></div>
   </div>
 
@@ -375,30 +389,58 @@
       mountWidget(el('widgetHome'), null);
     }
 
-    /* long press on the hat opens the sheet */
-    var pressTimer = null;
-    var hat = el('hat');
+    /* long press opens the sheet. Needs movement tolerance: a finger resting
+       on glass drifts a few pixels and an exact-match cancel never fires. */
+    var pressTimer = null, startX = 0, startY = 0;
+    var zone = el('pressZone');
+    var MOVE_TOLERANCE = 14;
 
-    function pressStart() {
-      hat.classList.add('pressing');
+    function pressStart(x, y) {
+      startX = x; startY = y;
+      zone.classList.add('pressing');
+      if (pressTimer) clearTimeout(pressTimer);
       pressTimer = setTimeout(function () {
-        hat.classList.remove('pressing');
+        pressTimer = null;
+        zone.classList.remove('pressing');
         openSetup();
-      }, 700);
+      }, 600);
     }
+
+    function pressMove(x, y) {
+      if (!pressTimer) return;
+      if (Math.abs(x - startX) > MOVE_TOLERANCE || Math.abs(y - startY) > MOVE_TOLERANCE) pressEnd();
+    }
+
     function pressEnd() {
-      hat.classList.remove('pressing');
+      zone.classList.remove('pressing');
       if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
     }
 
-    hat.addEventListener('touchstart', pressStart, { passive: true });
-    hat.addEventListener('touchend', pressEnd);
-    hat.addEventListener('touchcancel', pressEnd);
-    hat.addEventListener('touchmove', pressEnd, { passive: true });
-    hat.addEventListener('mousedown', pressStart);
-    hat.addEventListener('mouseup', pressEnd);
-    hat.addEventListener('mouseleave', pressEnd);
-    hat.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    zone.addEventListener('touchstart', function (e) {
+      var t = e.changedTouches[0];
+      pressStart(t.clientX, t.clientY);
+    }, { passive: true });
+    zone.addEventListener('touchmove', function (e) {
+      var t = e.changedTouches[0];
+      pressMove(t.clientX, t.clientY);
+    }, { passive: true });
+    zone.addEventListener('touchend', pressEnd);
+    zone.addEventListener('touchcancel', pressEnd);
+    zone.addEventListener('mousedown', function (e) { pressStart(e.clientX, e.clientY); });
+    zone.addEventListener('mousemove', function (e) { pressMove(e.clientX, e.clientY); });
+    zone.addEventListener('mouseup', pressEnd);
+    zone.addEventListener('mouseleave', pressEnd);
+    zone.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+    /* belt and braces: five quick taps on the NORTH POLE label also opens it,
+       in case a given iOS build still swallows the long press */
+    var tapCount = 0, tapTimer = null;
+    document.querySelector('.kicker').addEventListener('click', function () {
+      tapCount++;
+      if (tapTimer) clearTimeout(tapTimer);
+      tapTimer = setTimeout(function () { tapCount = 0; }, 2000);
+      if (tapCount >= 5) { tapCount = 0; openSetup(); }
+    });
 
     function openSetup() {
       state = 'setup';
