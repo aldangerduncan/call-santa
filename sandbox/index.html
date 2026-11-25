@@ -327,16 +327,19 @@
       var w = document.createElement('elevenlabs-convai');
       w.setAttribute('agent-id', AGENT_ID);
       var p = loadProfile();
+      var vars = { call_reason: (opts && opts.reason) ? opts.reason : DEFAULT_REASON };
+      // Send only what this device actually holds. Anything omitted falls
+      // through to the agent's own defaults, so no child's details need to
+      // live in this public repository.
+      var map = {
+        child_name: p.name, child_age: p.age, child_loves: p.loves,
+        child_family: p.family, child_hoping_for: p.hoping, child_favours: p.favours
+      };
+      Object.keys(map).forEach(function (k) {
+        if (map[k] && String(map[k]).trim()) vars[k] = String(map[k]).trim();
+      });
       // setAttribute sidesteps any quoting problems in the JSON value
-      w.setAttribute('dynamic-variables', JSON.stringify({
-        call_reason: (opts && opts.reason) ? opts.reason : DEFAULT_REASON,
-        child_name: p.name || 'my friend',
-        child_age: p.age || 'a young child',
-        child_loves: p.loves || 'you do not know yet, so ask them about it',
-        child_family: p.family || 'you do not know yet, so ask them about it',
-        child_hoping_for: p.hoping || 'you do not know yet, so ask them about it',
-        child_favours: p.favours || ''
-      }));
+      w.setAttribute('dynamic-variables', JSON.stringify(vars));
       if (opts && opts.answerMode) {
         w.setAttribute('start-call-text', 'Answer');
         w.setAttribute('action-text', 'Santa is calling');
@@ -399,12 +402,12 @@
       var p = loadProfile();
       el('subLine').textContent = p.name
         ? p.name + "'s own line to the workshop"
-        : 'Set up who Santa is calling';
+        : 'A direct line to the workshop';
     }
 
     mountWidget(el('widgetHome'), null);
     paintName();
-    if (!hasProfile()) openProfile();
+
 
     /* ---------- ringtone, synthesised so there is no audio file to ship ---------- */
     var audioCtx = null, ringTimer = null;
@@ -549,12 +552,12 @@
       var p = loadProfile();
       el('subLine').textContent = p.name
         ? p.name + "'s own line to the workshop"
-        : 'Set up who Santa is calling';
+        : 'A direct line to the workshop';
     }
 
     mountWidget(el('widgetHome'), null);
     paintName();
-    if (!hasProfile()) openProfile();
+
     }
 
     /* long press opens the sheet. Needs movement tolerance: a finger resting
