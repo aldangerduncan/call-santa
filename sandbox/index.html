@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>Call Santa (sandbox)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Santa Sandbox">
+<meta name="theme-color" content="#0B1E3A">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy-top: #15264a;
+    --navy-bot: #060f22;
+    --cream: #fff9ea;
+    --red: #cb1430;
+    --gold: #e8b33a;
+    --green: #22a06b;
+  }
+
+  html, body { min-height: 100%; overscroll-behavior: none; }
+
+  body {
+    font-family: 'Fredoka', ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: var(--cream);
+    background: var(--navy-bot);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* ---------- shared backdrop ---------- */
+  .sky {
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(120% 80% at 50% 8%, rgba(232,179,58,.10) 0%, rgba(232,179,58,0) 55%),
+      linear-gradient(170deg, var(--navy-top) 0%, #0b1a35 45%, var(--navy-bot) 100%);
+  }
+  .stars { position: fixed; inset: 0; opacity: .85; }
+  .stars span {
+    position: absolute; width: 2px; height: 2px; border-radius: 50%;
+    background: var(--cream); animation: twinkle 4s ease-in-out infinite;
+  }
+  @keyframes twinkle { 0%,100% { opacity:.25 } 50% { opacity:.95 } }
+
+  .snow { position: fixed; inset: 0; pointer-events: none; }
+  .flake {
+    position: absolute; top: -12vh; border-radius: 50%; background: #fff; opacity: .75;
+    animation-name: fall; animation-timing-function: linear; animation-iteration-count: infinite;
+  }
+  @keyframes fall {
+    0% { transform: translate3d(0, -12vh, 0); }
+    100% { transform: translate3d(var(--drift, 2vw), 112vh, 0); }
+  }
+
+  .ground {
+    position: fixed; left: -5%; right: -5%; bottom: -6vh; height: 26vh;
+    background: var(--cream); border-radius: 50% 50% 0 0 / 22vh 22vh 0 0; opacity: .96;
+  }
+
+  /* ---------- home ---------- */
+  .wrap {
+    position: relative;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    padding: calc(env(safe-area-inset-top) + 6vh) 24px calc(env(safe-area-inset-bottom) + 132px);
+    text-align: center;
+  }
+
+  .kicker {
+    font-size: 13px; font-weight: 600; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--gold); opacity: .9;
+  }
+
+  h1 {
+    margin-top: 10px; font-size: clamp(42px, 13vw, 68px); font-weight: 700;
+    line-height: 1.02; letter-spacing: -.01em; text-shadow: 0 2px 24px rgba(0,0,0,.45);
+  }
+
+  .sub {
+    margin-top: 12px; font-size: clamp(15px, 4.2vw, 18px); font-weight: 400;
+    color: rgba(255,249,234,.72); max-width: 19ch;
+  }
+
+  /* iOS hijacks long-press on images for its own share menu unless
+     touch-callout is disabled. Without this the press never reaches us. */
+  .press-zone {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    padding: 10px 28px 18px;
+    border-radius: 28px;
+    transition: transform .18s ease, background .18s ease;
+  }
+  .press-zone.pressing {
+    transform: scale(.96);
+    background: rgba(255,249,234,.05);
+  }
+  .hat {
+    width: clamp(96px, 28vw, 132px); height: auto; margin-top: 4vh;
+    filter: drop-shadow(0 10px 28px rgba(0,0,0,.5)); border-radius: 24px;
+    -webkit-touch-callout: none;
+    pointer-events: none;
+  }
+
+  .widget-slot {
+    margin-top: auto; width: 100%; display: flex; justify-content: center;
+    position: relative; z-index: 5;
+  }
+
+  /* ---------- overlays ---------- */
+  .layer {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    padding: calc(env(safe-area-inset-top) + 20px) 22px calc(env(safe-area-inset-bottom) + 20px);
+  }
+  .layer.show { display: flex; }
+
+  /* setup sheet */
+  #setup { background: rgba(4,10,22,.92); backdrop-filter: blur(10px); justify-content: flex-end; }
+  .sheet {
+    width: 100%; max-width: 440px; background: #13244a; border: 1px solid #27406c;
+    border-radius: 26px; padding: 22px 20px 20px; text-align: left;
+    box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  }
+  .sheet h2 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .sheet p.hint { font-size: 13.5px; color: rgba(255,249,234,.6); margin-bottom: 16px; line-height: 1.45; }
+  textarea {
+    width: 100%; min-height: 96px; resize: none; border-radius: 16px; padding: 13px 14px;
+    background: #0a1733; border: 1px solid #2c4875; color: var(--cream);
+    font-family: inherit; font-size: 16px; line-height: 1.45; -webkit-user-select: text; user-select: text;
+  }
+  textarea:focus { outline: none; border-color: var(--gold); }
+  .label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); margin: 18px 0 9px; font-weight: 600; }
+  .delays { display: flex; gap: 9px; }
+  .delays button {
+    flex: 1; padding: 12px 0; border-radius: 999px; border: 1px solid #2c4875;
+    background: #0a1733; color: var(--cream); font-family: inherit; font-size: 14.5px; font-weight: 500;
+  }
+  .delays button.on { background: var(--gold); border-color: var(--gold); color: #10203f; font-weight: 600; }
+  .actions { display: flex; gap: 10px; margin-top: 20px; }
+  .actions button { flex: 1; padding: 15px 0; border-radius: 999px; border: none; font-family: inherit; font-size: 16px; font-weight: 600; }
+  #cancelBtn { background: #22365e; color: var(--cream); }
+  #startBtn { background: var(--red); color: var(--cream); }
+  #startBtn:disabled { opacity: .4; }
+
+  /* blackout */
+  #blackout { background: #000; z-index: 60; justify-content: center; }
+  #blackout .tap-note { color: #1a1a1a; font-size: 12px; letter-spacing: .1em; }
+
+  /* ringing */
+  #ringing {
+    background: linear-gradient(180deg, #0d1c38 0%, #050c1c 100%);
+    z-index: 70; justify-content: space-between;
+  }
+  .caller { text-align: center; margin-top: 8vh; }
+  .caller img {
+    width: 118px; height: 118px; border-radius: 50%; object-fit: cover;
+    box-shadow: 0 0 0 5px rgba(255,249,234,.1), 0 16px 44px rgba(0,0,0,.6);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+  .caller .name { margin-top: 22px; font-size: 34px; font-weight: 600; letter-spacing: -.01em; }
+  .caller .status { margin-top: 7px; font-size: 15.5px; color: rgba(255,249,234,.6); }
+  .ring-actions { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 18px; padding-bottom: 4vh; }
+  .ring-answer { width: 100%; display: flex; justify-content: center; }
+  #declineBtn {
+    background: none; border: none; color: rgba(255,249,234,.45);
+    font-family: inherit; font-size: 15px; padding: 10px 18px;
+  }
+
+  .badge {
+    display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px;
+    background: rgba(232,179,58,.16); border: 1px solid rgba(232,179,58,.4);
+    font-size: 10px; letter-spacing: .12em;
+  }
+  #editProfileBtn {
+    position: relative; z-index: 6; margin-top: 14px; background: none; border: none;
+    color: rgba(11,26,58,.55); font-family: inherit; font-size: 13px; font-weight: 500;
+    text-decoration: underline; padding: 8px 12px;
+  }
+  .sheet { max-height: 86vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .sheet input {
+    width: 100%; border-radius: 14px; padding: 12px 14px;
+    background: #0a1733; border: 1px solid #2c4875; color: var(--cream);
+    font-family: inherit; font-size: 16px; -webkit-user-select: text; user-select: text;
+  }
+  .sheet input:focus { outline: none; border-color: var(--gold); }
+  .sheet textarea { min-height: 62px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flake, .stars span, .caller img { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="sky"></div>
+  <div class="stars" id="stars"></div>
+  <div class="snow" id="snow"></div>
+  <div class="ground"></div>
+
+  <div class="wrap">
+    <p class="kicker">North Pole <span class="badge">sandbox</span></p>
+    <h1>Call Santa</h1>
+    <p class="sub" id="subLine">Your own line to the workshop</p>
+    <div class="press-zone" id="pressZone"><img class="hat" src="icon-512.png" alt=""></div>
+    <div class="widget-slot" id="widgetHome"></div>
+    <button id="editProfileBtn">Change who Santa calls</button>
+  </div>
+
+  <!-- reason sheet -->
+  <div class="layer" id="setup">
+    <div class="sheet">
+      <h2>Santa calls back</h2>
+      <p class="hint">What should Santa ring about? Leave it blank for an ordinary friendly chat.</p>
+      <textarea id="reason" placeholder="He hasn't been listening when Mum asks him to get dressed" maxlength="300"></textarea>
+      <p class="label">Ring in</p>
+      <div class="delays" id="delays">
+        <button data-s="30">30 sec</button>
+        <button data-s="60" class="on">1 min</button>
+        <button data-s="120">2 min</button>
+      </div>
+      <div class="actions">
+        <button id="cancelBtn">Cancel</button>
+        <button id="startBtn">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- who is Santa calling -->
+  <div class="layer" id="profile">
+    <div class="sheet">
+      <h2>Who is Santa calling?</h2>
+      <p class="hint">Kept on this phone only. Nothing is sent anywhere except into the call itself.</p>
+      <p class="label">First name</p>
+      <input id="pName" type="text" maxlength="40" placeholder="Harry">
+      <p class="label">How old</p>
+      <input id="pAge" type="text" maxlength="40" placeholder="5 and a half">
+      <p class="label">Things they love</p>
+      <textarea id="pLoves" maxlength="300" placeholder="Dinosaurs, Lego, swimming"></textarea>
+      <p class="label">Family and friends</p>
+      <textarea id="pFamily" maxlength="300" placeholder="Big brother Jack, their dog Rosie"></textarea>
+      <p class="label">Hoping for at Christmas</p>
+      <textarea id="pHoping" maxlength="300" placeholder="A scooter"></textarea>
+      <p class="label">What Santa should gently encourage</p>
+      <textarea id="pFavours" maxlength="300" placeholder="Going to bed without a fuss, being kind to his brother"></textarea>
+      <div class="actions">
+        <button id="saveProfileBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- blackout -->
+  <div class="layer" id="blackout"><p class="tap-note" id="blackNote">tap twice to cancel</p></div>
+
+  <!-- incoming call -->
+  <div class="layer" id="ringing">
+    <div class="caller">
+      <img src="icon-512.png" alt="">
+      <div class="name">Santa</div>
+      <div class="status">North Pole &middot; incoming call</div>
+    </div>
+    <div class="ring-actions">
+      <div class="ring-answer" id="widgetRing"></div>
+      <button id="declineBtn">Not now</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
+  <script>
+  (function () {
+    "use strict";
+
+    var AGENT_ID = "agent_0701m88m88zcfkav75y2te5qgebb";
+    var DEFAULT_REASON = "just a friendly check in";
+
+    var el = function (id) { return document.getElementById(id); };
+
+    /* ---------- decoration ---------- */
+    (function () {
+      var host = el('stars'), frag = document.createDocumentFragment(), i, s;
+      for (i = 0; i < 70; i++) {
+        s = document.createElement('span');
+        s.style.left = (Math.random() * 100) + 'vw';
+        s.style.top = (Math.random() * 62) + 'vh';
+        var sz = Math.random() < 0.18 ? 3 : 2;
+        s.style.width = s.style.height = sz + 'px';
+        s.style.animationDelay = (Math.random() * 4) + 's';
+        frag.appendChild(s);
+      }
+      host.appendChild(frag);
+    })();
+
+    (function () {
+      var host = el('snow'), frag = document.createDocumentFragment(), i, f;
+      for (i = 0; i < 48; i++) {
+        f = document.createElement('div');
+        f.className = 'flake';
+        var sz = 2 + Math.random() * 5;
+        f.style.width = f.style.height = sz + 'px';
+        f.style.left = (Math.random() * 100) + 'vw';
+        f.style.opacity = (0.25 + Math.random() * 0.55).toFixed(2);
+        f.style.setProperty('--drift', (Math.random() * 14 - 7).toFixed(1) + 'vw');
+        f.style.animationDuration = (9 + Math.random() * 14).toFixed(1) + 's';
+        f.style.animationDelay = (-Math.random() * 20).toFixed(1) + 's';
+        frag.appendChild(f);
+      }
+      host.appendChild(frag);
+    })();
+
+    /* ---------- widget mounting ----------
+       There is no documented API to start a call programmatically, so the
+       "Answer" control IS the widget's own button, restyled per mount. */
+    function mountWidget(container, opts) {
+      container.innerHTML = '';
+      var w = document.createElement('elevenlabs-convai');
+      w.setAttribute('agent-id', AGENT_ID);
+      var p = loadProfile();
+      // setAttribute sidesteps any quoting problems in the JSON value
+      w.setAttribute('dynamic-variables', JSON.stringify({
+        call_reason: (opts && opts.reason) ? opts.reason : DEFAULT_REASON,
+        child_name: p.name || 'my friend',
+        child_age: p.age || 'a young child',
+        child_loves: p.loves || 'you do not know yet, so ask them about it',
+        child_family: p.family || 'you do not know yet, so ask them about it',
+        child_hoping_for: p.hoping || 'you do not know yet, so ask them about it',
+        child_favours: p.favours || ''
+      }));
+      if (opts && opts.answerMode) {
+        w.setAttribute('start-call-text', 'Answer');
+        w.setAttribute('action-text', 'Santa is calling');
+      }
+      container.appendChild(w);
+      return w;
+    }
+
+    /* ---------- the child's profile, kept only on this phone ---------- */
+    var STORE_KEY = 'santa.child.v1';
+
+    function loadProfile() {
+      try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+      catch (e) { return {}; }
+    }
+
+    function saveProfile(p) {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(p)); } catch (e) {}
+    }
+
+    function hasProfile() {
+      var p = loadProfile();
+      return !!(p && p.name);
+    }
+
+    function fillProfileForm() {
+      var p = loadProfile();
+      el('pName').value = p.name || '';
+      el('pAge').value = p.age || '';
+      el('pLoves').value = p.loves || '';
+      el('pFamily').value = p.family || '';
+      el('pHoping').value = p.hoping || '';
+      el('pFavours').value = p.favours || '';
+    }
+
+    function openProfile() {
+      fillProfileForm();
+      state = 'profile';
+      show('profile');
+    }
+
+    el('saveProfileBtn').addEventListener('click', function () {
+      var name = el('pName').value.trim();
+      if (!name) { el('pName').focus(); return; }
+      saveProfile({
+        name: name,
+        age: el('pAge').value.trim(),
+        loves: el('pLoves').value.trim(),
+        family: el('pFamily').value.trim(),
+        hoping: el('pHoping').value.trim(),
+        favours: el('pFavours').value.trim()
+      });
+      document.activeElement && document.activeElement.blur();
+      goHome();
+    });
+
+    el('editProfileBtn').addEventListener('click', openProfile);
+
+    function paintName() {
+      var p = loadProfile();
+      el('subLine').textContent = p.name
+        ? p.name + "'s own line to the workshop"
+        : 'Set up who Santa is calling';
+    }
+
+    mountWidget(el('widgetHome'), null);
+    paintName();
+    if (!hasProfile()) openProfile();
+
+    /* ---------- ringtone, synthesised so there is no audio file to ship ---------- */
+    var audioCtx = null, ringTimer = null;
+
+    function primeAudio() {
+      try {
+        var Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        if (!audioCtx) audioCtx = new Ctx();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        // silent blip so iOS marks the context as user-activated
+        var b = audioCtx.createBuffer(1, 1, 22050);
+        var src = audioCtx.createBufferSource();
+        src.buffer = b;
+        src.connect(audioCtx.destination);
+        src.start(0);
+      } catch (e) { /* no audio is survivable, the screen still rings visually */ }
+    }
+
+    function burst(at, dur) {
+      if (!audioCtx) return;
+      var g = audioCtx.createGain();
+      g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(0.22, at + 0.02);
+      g.gain.setValueAtTime(0.22, at + dur - 0.03);
+      g.gain.linearRampToValueAtTime(0, at + dur);
+      [440, 480].forEach(function (f) {
+        var o = audioCtx.createOscillator();
+        o.type = 'sine';
+        o.frequency.value = f;
+        o.connect(g);
+        o.start(at);
+        o.stop(at + dur);
+      });
+    }
+
+    function startRinging() {
+      if (!audioCtx) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      var cycle = function () {
+        var t = audioCtx.currentTime;
+        burst(t + 0.0, 0.4);
+        burst(t + 0.6, 0.4);
+      };
+      cycle();
+      ringTimer = setInterval(cycle, 3000);
+    }
+
+    function stopRinging() {
+      if (ringTimer) { clearInterval(ringTimer); ringTimer = null; }
+    }
+
+    /* ---------- wake lock, so a black screen is not a sleeping screen ---------- */
+    var wakeLock = null;
+
+    function acquireWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      navigator.wakeLock.request('screen').then(function (lk) {
+        wakeLock = lk;
+        lk.addEventListener('release', function () { wakeLock = null; });
+      }).catch(function () { /* denied; timer still runs while the page is visible */ });
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    }
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && state !== 'home' && !wakeLock) acquireWakeLock();
+    });
+
+    /* ---------- state machine ---------- */
+    var state = 'home';
+    var pendingTimer = null;
+    var delaySecs = 60;
+
+    function show(id) {
+      ['setup', 'blackout', 'ringing', 'profile'].forEach(function (k) {
+        el(k).classList.toggle('show', k === id);
+      });
+    }
+
+    function goHome() {
+      stopRinging();
+      releaseWakeLock();
+      if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+      el('reason').value = '';
+      show(null);
+      state = 'home';
+      /* ---------- the child's profile, kept only on this phone ---------- */
+    var STORE_KEY = 'santa.child.v1';
+
+    function loadProfile() {
+      try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+      catch (e) { return {}; }
+    }
+
+    function saveProfile(p) {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(p)); } catch (e) {}
+    }
+
+    function hasProfile() {
+      var p = loadProfile();
+      return !!(p && p.name);
+    }
+
+    function fillProfileForm() {
+      var p = loadProfile();
+      el('pName').value = p.name || '';
+      el('pAge').value = p.age || '';
+      el('pLoves').value = p.loves || '';
+      el('pFamily').value = p.family || '';
+      el('pHoping').value = p.hoping || '';
+      el('pFavours').value = p.favours || '';
+    }
+
+    function openProfile() {
+      fillProfileForm();
+      state = 'profile';
+      show('profile');
+    }
+
+    el('saveProfileBtn').addEventListener('click', function () {
+      var name = el('pName').value.trim();
+      if (!name) { el('pName').focus(); return; }
+      saveProfile({
+        name: name,
+        age: el('pAge').value.trim(),
+        loves: el('pLoves').value.trim(),
+        family: el('pFamily').value.trim(),
+        hoping: el('pHoping').value.trim(),
+        favours: el('pFavours').value.trim()
+      });
+      document.activeElement && document.activeElement.blur();
+      goHome();
+    });
+
+    el('editProfileBtn').addEventListener('click', openProfile);
+
+    function paintName() {
+      var p = loadProfile();
+      el('subLine').textContent = p.name
+        ? p.name + "'s own line to the workshop"
+        : 'Set up who Santa is calling';
+    }
+
+    mountWidget(el('widgetHome'), null);
+    paintName();
+    if (!hasProfile()) openProfile();
+    }
+
+    /* long press opens the sheet. Needs movement tolerance: a finger resting
+       on glass drifts a few pixels and an exact-match cancel never fires. */
+    var pressTimer = null, startX = 0, startY = 0;
+    var zone = el('pressZone');
+    var MOVE_TOLERANCE = 14;
+
+    function pressStart(x, y) {
+      startX = x; startY = y;
+      zone.classList.add('pressing');
+      if (pressTimer) clearTimeout(pressTimer);
+      pressTimer = setTimeout(function () {
+        pressTimer = null;
+        zone.classList.remove('pressing');
+        openSetup();
+      }, 600);
+    }
+
+    function pressMove(x, y) {
+      if (!pressTimer) return;
+      if (Math.abs(x - startX) > MOVE_TOLERANCE || Math.abs(y - startY) > MOVE_TOLERANCE) pressEnd();
+    }
+
+    function pressEnd() {
+      zone.classList.remove('pressing');
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    }
+
+    zone.addEventListener('touchstart', function (e) {
+      var t = e.changedTouches[0];
+      pressStart(t.clientX, t.clientY);
+    }, { passive: true });
+    zone.addEventListener('touchmove', function (e) {
+      var t = e.changedTouches[0];
+      pressMove(t.clientX, t.clientY);
+    }, { passive: true });
+    zone.addEventListener('touchend', pressEnd);
+    zone.addEventListener('touchcancel', pressEnd);
+    zone.addEventListener('mousedown', function (e) { pressStart(e.clientX, e.clientY); });
+    zone.addEventListener('mousemove', function (e) { pressMove(e.clientX, e.clientY); });
+    zone.addEventListener('mouseup', pressEnd);
+    zone.addEventListener('mouseleave', pressEnd);
+    zone.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+    /* belt and braces: five quick taps on the NORTH POLE label also opens it,
+       in case a given iOS build still swallows the long press */
+    var tapCount = 0, tapTimer = null;
+    document.querySelector('.kicker').addEventListener('click', function () {
+      tapCount++;
+      if (tapTimer) clearTimeout(tapTimer);
+      tapTimer = setTimeout(function () { tapCount = 0; }, 2000);
+      if (tapCount >= 5) { tapCount = 0; openSetup(); }
+    });
+
+    function openSetup() {
+      state = 'setup';
+      show('setup');
+    }
+
+    el('cancelBtn').addEventListener('click', goHome);
+
+    el('delays').addEventListener('click', function (e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      Array.prototype.forEach.call(this.children, function (c) { c.classList.remove('on'); });
+      b.classList.add('on');
+      delaySecs = parseInt(b.getAttribute('data-s'), 10);
+    });
+
+    el('startBtn').addEventListener('click', function () {
+      var reason = el('reason').value.trim();
+      if (!reason) reason = DEFAULT_REASON;
+
+      // this click is the user gesture iOS needs before audio may play later
+      primeAudio();
+      acquireWakeLock();
+
+      // mount a fresh widget carrying the reason, ready behind the call screen
+      mountWidget(el('widgetRing'), { reason: reason, answerMode: true });
+
+      document.activeElement && document.activeElement.blur();
+      state = 'waiting';
+      show('blackout');
+
+      pendingTimer = setTimeout(function () {
+        pendingTimer = null;
+        state = 'ringing';
+        show('ringing');
+        startRinging();
+      }, delaySecs * 1000);
+    });
+
+    /* double tap the black screen to bail out */
+    var lastBlackTap = 0;
+    el('blackout').addEventListener('click', function () {
+      var now = Date.now();
+      if (now - lastBlackTap < 420) goHome();
+      lastBlackTap = now;
+    });
+
+    el('declineBtn').addEventListener('click', goHome);
+
+    /* once the call is actually answered, stop the ringtone */
+    window.addEventListener('elevenlabs-convai:call', function () {
+      stopRinging();
+    });
+
+    /* stop a small person pinch-zooming or double-tapping the layout apart */
+    document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+    var lastTouch = 0;
+    document.addEventListener('touchend', function (e) {
+      var now = Date.now();
+      if (now - lastTouch < 320 && !el('setup').classList.contains('show')) e.preventDefault();
+      lastTouch = now;
+    }, { passive: false });
+  })();
+  </script>
+</body>
+</html>
